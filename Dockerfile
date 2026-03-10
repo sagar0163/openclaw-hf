@@ -1,29 +1,28 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
 # Install dependencies
-COPY package.json .
-RUN npm install --production
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy app
-COPY . .
+# Install OpenClaw globally
+RUN npm install -g openclaw
 
-# Create user
-RUN addgroup -g 1000 -S appuser && \
-    adduser -u 1000 -S appuser -G appuser
+# Create required directories
+RUN mkdir -p ~/.openclaw/workspace ~/.openclaw/logs ~/.openclaw/memory
 
-# Set ownership
-RUN chown -R appuser:appuser /app
+# Copy config
+COPY openclaw-config.json ~/.openclaw/openclaw.json
 
-# Switch to non-root user
-USER appuser
-
-# Expose port (Hugging Face default)
+# Expose port
 EXPOSE 7860
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:7860/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:7860/health || exit 1
 
-CMD ["npm", "start"]
+# Start OpenClaw gateway
+CMD ["openclaw", "gateway", "--port", "7860"]
